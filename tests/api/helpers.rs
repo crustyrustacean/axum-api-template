@@ -1,4 +1,7 @@
-// tests/api/helpers.rs
+//! Test helpers for API integration tests.
+//!
+//! This module provides utilities for spinning up test instances
+//! of the application and making HTTP requests against it.
 
 // dependencies
 use axum_api_template_lib::get_configuration;
@@ -19,14 +22,51 @@ static TRACING: LazyLock<()> = LazyLock::new(|| {
     }
 });
 
-// struct type to represent a test application
+/// Represents a test application instance.
+///
+/// This struct contains the address of the spawned application
+/// and an HTTP client for making requests.
+#[allow(dead_code)]
 pub struct TestApp {
+    /// The base address of the test application (e.g., `http://localhost:1234`).
     pub address: String,
-    pub _port: u16,
-    pub _api_client: reqwest::Client,
+    /// The port the test application is listening on.
+    pub port: u16,
+    /// An HTTP client for making requests to the test application.
+    pub api_client: reqwest::Client,
 }
 
-// Spin up an instance of our application and returns its address (i.e. http://localhost:XXXX)
+/// Spawns an instance of the application for testing.
+///
+/// This function:
+/// 1. Initializes tracing (once, using `LazyLock`)
+/// 2. Loads configuration with a random port (port 0)
+/// 3. Starts the application in a background task
+/// 4. Returns a `TestApp` with the application's address
+///
+/// # Panics
+///
+/// Panics if:
+/// - Configuration cannot be loaded
+/// - The application fails to build
+/// - The HTTP client cannot be created
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use crate::helpers::spawn_app;
+///
+/// #[tokio::test]
+/// async fn test_something() {
+///     let app = spawn_app().await;
+///     let response = reqwest::Client::new()
+///         .get(format!("{}/health_check", app.address))
+///         .send()
+///         .await
+///         .unwrap();
+///     assert!(response.status().is_success());
+/// }
+/// ```
 pub async fn spawn_app() -> TestApp {
     LazyLock::force(&TRACING);
 
@@ -49,7 +89,7 @@ pub async fn spawn_app() -> TestApp {
 
     TestApp {
         address: format!("http://localhost:{}", application_port),
-        _port: application_port,
-        _api_client: client,
+        port: application_port,
+        api_client: client,
     }
 }

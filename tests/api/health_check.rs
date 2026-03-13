@@ -1,8 +1,9 @@
-// tests/api/health_check.rs
+//! Health check endpoint tests.
 
 // dependencies
 use crate::helpers::spawn_app;
 
+/// Tests that the health check endpoint returns a successful response.
 #[tokio::test]
 async fn health_check_works() {
     // Arrange

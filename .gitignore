@@ -1,5 +1,8 @@
 # .gitignore configuration
 
+# planning documents
+plans/
+
 # VS code settings
 .vscode
 
