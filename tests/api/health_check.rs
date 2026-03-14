@@ -1,23 +1,48 @@
-//! Health check endpoint tests.
+// tests/api/health_check.rs
 
 // dependencies
 use crate::helpers::spawn_app;
+use reqwest::header::CONTENT_TYPE;
+use serde_json::Value;
 
-/// Tests that the health check endpoint returns a successful response.
 #[tokio::test]
-async fn health_check_works() {
+async fn health_check_returns_200_ok_and_json_envelope() {
     // Arrange
     let app = spawn_app().await;
-    let client = reqwest::Client::new();
 
     // Act
-    let response = client
+    let response = app
+        .api_client
         .get(format!("{}/health_check", &app.address))
         .send()
         .await
-        .expect("failed to execute request.");
+        .expect("Failed to execute request.");
 
-    // Assert
+    // Assert: HTTP status
     assert!(response.status().is_success());
-    assert_eq!(Some(0), response.content_length());
+    assert_eq!(response.status().as_u16(), 200);
+
+    // Assert: content type is JSON
+    let ct = response
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    assert!(ct.starts_with("application/json"));
+
+    // Assert: JSON envelope fields
+    let body: Value = response.json().await.expect("Response was not valid JSON");
+
+    // success: true
+    assert_eq!(body.get("success").and_then(Value::as_bool), Some(true));
+
+    // message: should be absent (not provided for simple responses)
+    assert!(body.get("message").is_none());
+
+    // time: present and is a string (RFC3339 from chrono)
+    assert!(body.get("time").and_then(Value::as_str).is_some());
+
+    // data: present and null (because `()` serializes to JSON null)
+    assert!(body.get("data").is_some());
+    assert!(body.get("data").unwrap().is_null());
 }

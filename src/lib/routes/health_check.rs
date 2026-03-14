@@ -4,7 +4,7 @@
 //! HTTP 200 OK when the service is healthy.
 
 // dependencies
-use axum::{http::StatusCode, response::IntoResponse};
+use crate::response::ApiResponse;
 
 /// Health check endpoint.
 ///
@@ -17,6 +17,6 @@ use axum::{http::StatusCode, response::IntoResponse};
 ///
 /// HTTP/1.1 200 OK
 /// ```
-pub async fn health_check() -> impl IntoResponse {
-    StatusCode::OK
+pub async fn health_check() -> ApiResponse<()> {
+    ApiResponse::ok(())
 }

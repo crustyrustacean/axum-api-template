@@ -41,6 +41,7 @@
 pub mod configuration;
 pub mod errors;
 pub mod prelude;
+pub mod response;
 pub mod routes;
 pub mod startup;
 pub mod telemetry;
@@ -48,5 +49,6 @@ pub mod telemetry;
 // re-exports
 pub use configuration::*;
 pub use errors::*;
+pub use response::*;
 pub use startup::*;
 pub use telemetry::*;

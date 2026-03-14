@@ -4,6 +4,18 @@
 //! HTTP error responses from the API. It implements [`axum::response::IntoResponse`]
 //! for seamless integration with Axum handlers.
 //!
+//! # Response Format
+//!
+//! Error responses use the same envelope format as [`ApiResponse`](crate::response::ApiResponse):
+//!
+//! ```json
+//! {
+//!   "success": false,
+//!   "message": "Resource not found: User 123",
+//!   "time": "2024-01-15T10:30:00Z"
+//! }
+//! ```
+//!
 //! # Example
 //!
 //! ```rust
@@ -16,8 +28,11 @@
 //! ```
 
 // dependencies
+use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use chrono::{DateTime, Utc};
+use serde::Serialize;
 
 /// API error types with HTTP status code mapping.
 ///
@@ -42,7 +57,7 @@ use axum::response::{IntoResponse, Response};
 /// use axum_api_template_lib::errors::ApiError;
 ///
 /// let error = ApiError::NotFound("User 123 not found".to_string());
-/// // This will return a 404 response with the body "Not Found: User 123 not found"
+/// // This will return a 404 response with the error envelope
 /// ```
 #[derive(thiserror::Error)]
 #[non_exhaustive]
@@ -76,28 +91,63 @@ pub enum ApiError {
     Internal(String),
 }
 
+impl ApiError {
+    /// Returns the HTTP status code for this error.
+    #[must_use]
+    pub fn status_code(&self) -> StatusCode {
+        match self {
+            ApiError::BadRequest(_) => StatusCode::BAD_REQUEST,
+            ApiError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
+            ApiError::Forbidden(_) => StatusCode::FORBIDDEN,
+            ApiError::NotFound(_) => StatusCode::NOT_FOUND,
+            ApiError::Conflict(_) => StatusCode::CONFLICT,
+            ApiError::UnprocessableEntity(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            ApiError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+
+    /// Returns the error message for this error.
+    #[must_use]
+    pub fn message(&self) -> String {
+        match self {
+            ApiError::BadRequest(msg) => format!("Bad Request: {}", msg),
+            ApiError::Unauthorized(msg) => format!("Unauthorized: {}", msg),
+            ApiError::Forbidden(msg) => format!("Forbidden: {}", msg),
+            ApiError::NotFound(msg) => format!("Not Found: {}", msg),
+            ApiError::Conflict(msg) => format!("Conflict: {}", msg),
+            ApiError::UnprocessableEntity(msg) => format!("Unprocessable Entity: {}", msg),
+            ApiError::Internal(msg) => format!("Internal Server Error: {}", msg),
+        }
+    }
+}
+
+/// Error response envelope matching the [`ApiResponse`](crate::response::ApiResponse) format.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ErrorResponse {
+    /// Always `false` for error responses.
+    success: bool,
+    /// The error message.
+    message: String,
+    /// Timestamp when the error response was generated.
+    time: DateTime<Utc>,
+}
+
 // implement the IntoResponse trait for the ApiError type
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let (status, msg) = match &self {
-            ApiError::BadRequest(err) => (StatusCode::BAD_REQUEST, format!("Bad Request: {}", err)),
-            ApiError::Unauthorized(err) => {
-                (StatusCode::UNAUTHORIZED, format!("Unauthorized: {}", err))
-            }
-            ApiError::Forbidden(err) => (StatusCode::FORBIDDEN, format!("Forbidden: {}", err)),
-            ApiError::NotFound(err) => (StatusCode::NOT_FOUND, format!("Not Found: {}", err)),
-            ApiError::Conflict(err) => (StatusCode::CONFLICT, format!("Conflict: {}", err)),
-            ApiError::UnprocessableEntity(err) => (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                format!("Unprocessable Entity: {}", err),
-            ),
-            ApiError::Internal(err) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Internal Server Error: {}", err),
-            ),
-        };
+        let status = self.status_code();
+        let message = self.message();
+
         tracing::error!("Error occurred: {:?}", self);
-        (status, msg).into_response()
+
+        let error_response = ErrorResponse {
+            success: false,
+            message,
+            time: Utc::now(),
+        };
+
+        (status, Json(error_response)).into_response()
     }
 }
 
@@ -132,4 +182,39 @@ pub fn error_chain_fmt(
         current = cause.source();
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_status_code_mapping() {
+        assert_eq!(ApiError::BadRequest("test".into()).status_code(), StatusCode::BAD_REQUEST);
+        assert_eq!(ApiError::Unauthorized("test".into()).status_code(), StatusCode::UNAUTHORIZED);
+        assert_eq!(ApiError::Forbidden("test".into()).status_code(), StatusCode::FORBIDDEN);
+        assert_eq!(ApiError::NotFound("test".into()).status_code(), StatusCode::NOT_FOUND);
+        assert_eq!(ApiError::Conflict("test".into()).status_code(), StatusCode::CONFLICT);
+        assert_eq!(ApiError::UnprocessableEntity("test".into()).status_code(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(ApiError::Internal("test".into()).status_code(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[test]
+    fn test_message_formatting() {
+        let error = ApiError::NotFound("User 123".into());
+        assert_eq!(error.message(), "Not Found: User 123");
+    }
+
+    #[test]
+    fn test_error_response_serialization() {
+        let error = ApiError::BadRequest("Invalid input".into());
+        let response = ErrorResponse {
+            success: false,
+            message: error.message(),
+            time: Utc::now(),
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"success\":false"));
+        assert!(json.contains("\"message\":\"Bad Request: Invalid input\""));
+    }
 }
